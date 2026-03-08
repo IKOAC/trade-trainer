@@ -1,7 +1,7 @@
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
-import { Candle } from '../../lib/types';
+import { Candle } from "../../lib/types";
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'market');
 const PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
@@ -9,16 +9,6 @@ const TIMEFRAMES = ['1m', '5m', '15m'];
 
 const symbolFile = (symbol: string, interval: string) =>
   path.join(DATA_DIR, `${symbol.slice(0, 3).toLowerCase()}_${interval}.json`);
-
-const isValidCandle = (value: Partial<Candle>): value is Candle =>
-  Number.isFinite(value.time) &&
-  Number.isFinite(value.open) &&
-  Number.isFinite(value.high) &&
-  Number.isFinite(value.low) &&
-  Number.isFinite(value.close) &&
-  Number.isFinite(value.volume);
-
-const sanitizeCandles = (candles: Partial<Candle>[]) => candles.filter(isValidCandle).sort((a, b) => a.time - b.time);
 
 const toCandle = (row: any[]): Candle => ({
   time: Math.floor(Number(row[0]) / 1000),
@@ -52,19 +42,7 @@ const syntheticCandles = (count = 3000): Candle[] => {
 async function fetchBinance(symbol: string, interval: string, limit = 1000): Promise<Candle[]> {
   const url = 'https://api.binance.com/api/v3/klines';
   const { data } = await axios.get(url, { params: { symbol, interval, limit }, timeout: 15000 });
-  return sanitizeCandles(data.map(toCandle));
-}
-
-async function readExistingCandles(file: string): Promise<Candle[] | null> {
-  try {
-    const raw = await fs.readFile(file, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    const candles = sanitizeCandles(parsed);
-    return candles.length >= 150 ? candles : null;
-  } catch {
-    return null;
-  }
+  return data.map(toCandle);
 }
 
 export async function ensureMarketData(force = false) {
@@ -73,15 +51,15 @@ export async function ensureMarketData(force = false) {
     for (const timeframe of TIMEFRAMES) {
       const file = symbolFile(pair, timeframe);
       if (!force) {
-        const existing = await readExistingCandles(file);
-        if (existing) {
+        try {
+          await fs.access(file);
           continue;
+        } catch {
+          // fetch
         }
       }
-
       try {
         const candles = await fetchBinance(pair, timeframe, 1000);
-        if (candles.length < 150) throw new Error('Insufficient candles from Binance');
         await fs.writeFile(file, JSON.stringify(candles, null, 2), 'utf-8');
       } catch {
         const candles = syntheticCandles(1200);
@@ -93,16 +71,8 @@ export async function ensureMarketData(force = false) {
 
 export async function loadMarketCandles(symbol: string, timeframe: string): Promise<Candle[]> {
   const file = symbolFile(symbol, timeframe);
-  const candles = await readExistingCandles(file);
-  if (candles && candles.length) return candles;
-
-  await ensureMarketData(true);
-  const refreshed = await readExistingCandles(file);
-  if (refreshed && refreshed.length) return refreshed;
-
-  const fallback = syntheticCandles(1200);
-  await fs.writeFile(file, JSON.stringify(fallback, null, 2), 'utf-8');
-  return fallback;
+  const raw = await fs.readFile(file, 'utf-8');
+  return JSON.parse(raw) as Candle[];
 }
 
 export function scheduleDailyRefresh() {

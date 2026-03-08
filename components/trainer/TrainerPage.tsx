@@ -26,8 +26,6 @@ export default function TrainerPage() {
   const [stats, setStats] = useState<any>({ totalCharts: 0, accuracy: 0, byPattern: [], longestStreak: 0, currentStreak: 0, dailyTotal: 0, dailyAccuracy: 0, score: 0 });
   const [elapsedSec, setElapsedSec] = useState(0);
   const [trade, setTrade] = useState<{ side: 'buy' | 'sell' | 'skip'; pnl: number; rr: number } | null>(null);
-  const [isLoadingScenario, setIsLoadingScenario] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const candles = useMemo<Candle[]>(() => {
     if (!scenario) return [];
@@ -35,45 +33,23 @@ export default function TrainerPage() {
   }, [scenario, visibleAfter]);
 
   const fetchScenario = async () => {
-    setIsLoadingScenario(true);
-    setError(null);
-    try {
-      const q = new URLSearchParams({ difficulty, module }).toString();
-      const res = await fetch(`/api/scenario?${q}`);
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(payload.error || 'Could not fetch a training scenario.');
-      }
-      const data = (await res.json()) as Scenario;
-      if (!data || !Array.isArray(data.before) || data.before.length === 0) {
-        throw new Error('Scenario data is empty.');
-      }
-      setScenario(data);
-      setVisibleAfter(0);
-      setFeedback(null);
-      setTrade(null);
-      setIsPlaying(false);
-      setDecisionStartedAt(Date.now());
-    } catch (err) {
-      setScenario(null);
-      setError(err instanceof Error ? err.message : 'Unable to load scenario.');
-    } finally {
-      setIsLoadingScenario(false);
-    }
+    const q = new URLSearchParams({ difficulty, module }).toString();
+    const res = await fetch(`/api/scenario?${q}`);
+    const data = await res.json();
+    setScenario(data);
+    setVisibleAfter(0);
+    setFeedback(null);
+    setTrade(null);
+    setIsPlaying(false);
+    setDecisionStartedAt(Date.now());
   };
 
   const fetchStats = async () => {
     const res = await fetch('/api/stats');
-    if (res.ok) {
-      setStats(await res.json());
-    }
+    setStats(await res.json());
   };
 
-  useEffect(() => {
-    fetchScenario();
-    fetchStats();
-  }, [difficulty, module]);
-
+  useEffect(() => { fetchScenario(); fetchStats(); }, [difficulty, module]);
   useEffect(() => {
     const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(t);
@@ -94,14 +70,13 @@ export default function TrainerPage() {
   }, [isPlaying, scenario, speed]);
 
   const submitDecision = async (answer: PatternType) => {
-    if (!scenario || feedback || isLoadingScenario) return;
+    if (!scenario || feedback) return;
     const responseMs = Date.now() - decisionStartedAt;
     const baseScore = answer === scenario.pattern ? 10 : 0;
     const speedBonus = Math.max(0, 5 - Math.floor(responseMs / 4000));
     const score = (baseScore + speedBonus) * difficultyBonus[difficulty];
     const res = await fetch('/api/attempt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         scenarioId: scenario.id,
         pattern: scenario.pattern,
@@ -130,46 +105,25 @@ export default function TrainerPage() {
     setTrade({ side, pnl: Number(pnl.toFixed(2)), rr: Number((reward / risk).toFixed(2)) });
   };
 
-  const controlsDisabled = !scenario || isLoadingScenario;
-
   return (
     <main className="min-h-screen p-4">
       <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-3">
-          <Sidebar stats={stats} difficulty={difficulty} setDifficulty={setDifficulty} module={module} setModule={setModule} elapsedSec={elapsedSec} />
-        </div>
+        <div className="col-span-3"><Sidebar stats={stats} difficulty={difficulty} setDifficulty={setDifficulty} module={module} setModule={setModule} elapsedSec={elapsedSec} /></div>
         <div className="col-span-9 space-y-4">
-          {error && (
-            <div className="panel p-3 text-amber-300 text-sm">
-              {error}
-              <button onClick={fetchScenario} className="ml-3 px-3 py-1 rounded bg-cyan-700 text-white">Retry</button>
-            </div>
-          )}
-
           <CandleChart candles={candles} />
 
           <div className="panel p-4 flex flex-wrap gap-2 items-center">
             {decisionLabels.map((d) => (
-              <button
-                key={d.key}
-                onClick={() => submitDecision(d.key)}
-                className="px-3 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50"
-                disabled={!!feedback || controlsDisabled}
-              >
-                {d.label}
-              </button>
+              <button key={d.key} onClick={() => submitDecision(d.key)} className="px-3 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50" disabled={!!feedback}>{d.label}</button>
             ))}
 
             <div className="ml-auto flex gap-2">
-              <button onClick={() => setIsPlaying(true)} className="px-3 py-2 rounded bg-slate-700" disabled={controlsDisabled}>Play</button>
-              <button onClick={() => setIsPlaying(false)} className="px-3 py-2 rounded bg-slate-700" disabled={controlsDisabled}>Pause</button>
-              <button onClick={() => setVisibleAfter((v) => Math.min(v + 1, scenario?.after.length || 0))} className="px-3 py-2 rounded bg-slate-700" disabled={controlsDisabled}>Step</button>
-              <button onClick={() => setVisibleAfter(0)} className="px-3 py-2 rounded bg-slate-700" disabled={controlsDisabled}>Restart</button>
-              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="bg-slate-900 border border-slate-700 rounded px-2" disabled={controlsDisabled}>
-                <option value={800}>0.5x</option>
-                <option value={500}>1x</option>
-                <option value={250}>2x</option>
-                <option value={100}>5x</option>
+              <button onClick={() => setIsPlaying(true)} className="px-3 py-2 rounded bg-slate-700">Play</button>
+              <button onClick={() => setIsPlaying(false)} className="px-3 py-2 rounded bg-slate-700">Pause</button>
+              <button onClick={() => setVisibleAfter((v) => Math.min(v + 1, scenario?.after.length || 0))} className="px-3 py-2 rounded bg-slate-700">Step</button>
+              <button onClick={() => setVisibleAfter(0)} className="px-3 py-2 rounded bg-slate-700">Restart</button>
+              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="bg-slate-900 border border-slate-700 rounded px-2">
+                <option value={800}>0.5x</option><option value={500}>1x</option><option value={250}>2x</option><option value={100}>5x</option>
               </select>
             </div>
           </div>

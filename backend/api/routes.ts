@@ -7,25 +7,15 @@ const router = Router();
 router.get('/health', (_, res) => res.json({ ok: true }));
 
 router.get('/scenario', async (req, res) => {
-  try {
-    const difficulty = String(req.query.difficulty || 'all');
-    const moduleName = String(req.query.module || 'mixed');
-    const scenarios = await ensureTrainingData();
-    const filtered = scenarios.filter((s) =>
-      (difficulty === 'all' || s.difficulty === difficulty) &&
-      (moduleName === 'mixed' || s.module === moduleName)
-    );
-    const pick = filtered[Math.floor(Math.random() * filtered.length)] || scenarios[0];
-
-    if (!pick) {
-      return res.status(503).json({ error: 'No training scenarios available yet. Please retry in a moment.' });
-    }
-
-    return res.json(pick);
-  } catch (error) {
-    console.error('Failed to load scenario', error);
-    return res.status(500).json({ error: 'Failed to load scenario.' });
-  }
+  const difficulty = String(req.query.difficulty || 'all');
+  const moduleName = String(req.query.module || 'mixed');
+  const scenarios = await ensureTrainingData();
+  const filtered = scenarios.filter((s) =>
+    (difficulty === 'all' || s.difficulty === difficulty) &&
+    (moduleName === 'mixed' || s.module === moduleName)
+  );
+  const pick = filtered[Math.floor(Math.random() * filtered.length)] || scenarios[0];
+  res.json(pick);
 });
 
 router.post('/attempt', async (req, res) => {

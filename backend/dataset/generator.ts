@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { Scenario } from '../../lib/types';
-import { ensureMarketData, loadMarketCandles } from '../data/marketData';
+import { loadMarketCandles } from '../data/marketData';
 import { classifyPattern, difficultyFromPattern, explanationFor, moduleFromTags } from './patternEngine';
 
 const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
@@ -12,8 +12,6 @@ const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max 
 
 export async function generateScenarios(perSeries = 120): Promise<Scenario[]> {
   await fs.mkdir(TRAINING_DIR, { recursive: true });
-  await ensureMarketData();
-
   const scenarios: Scenario[] = [];
 
   for (const pair of PAIRS) {
@@ -56,8 +54,7 @@ export async function generateScenarios(perSeries = 120): Promise<Scenario[]> {
 export async function loadScenarios() {
   const p = path.join(TRAINING_DIR, 'scenarios.json');
   const raw = await fs.readFile(p, 'utf-8');
-  const parsed = JSON.parse(raw);
-  return Array.isArray(parsed) ? (parsed as Scenario[]) : [];
+  return JSON.parse(raw) as Scenario[];
 }
 
 export async function ensureTrainingData() {
@@ -65,11 +62,7 @@ export async function ensureTrainingData() {
     const scenarios = await loadScenarios();
     if (scenarios.length > 0) return scenarios;
   } catch {
-    // generate below
+    // generate
   }
-
-  const generated = await generateScenarios();
-  if (generated.length > 0) return generated;
-
-  return generateScenarios(40);
+  return generateScenarios();
 }
